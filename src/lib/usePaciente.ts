@@ -2,24 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import type { Patient } from "./types";
+import type { Paciente } from "./types";
 
-export function usePatient() {
-  const [patient, setPatient] = useState<Patient | null>(null);
+export function usePaciente() {
+  const [paciente, setPaciente] = useState<Paciente | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     supabase
-      .from("patients")
+      .from("paciente")
       .select("*")
       .limit(1)
       .maybeSingle()
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) setError(error.message);
-        setPatient(data);
+        setPaciente(data);
         setLoading(false);
       });
     return () => {
@@ -27,5 +27,5 @@ export function usePatient() {
     };
   }, []);
 
-  return { patient, loading, error };
+  return { paciente, loading, error };
 }

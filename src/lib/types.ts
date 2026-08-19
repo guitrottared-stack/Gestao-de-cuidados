@@ -12,54 +12,61 @@ export type TaskCategory =
   | "banho_sol"
   | "estimulacao";
 
-export type Turno = "diurno" | "noturno";
+export type TipoUsuario = "cuidador" | "familia";
 
-export interface Patient {
+export interface Paciente {
   id: string;
-  name: string;
+  nome: string;
 }
 
-export interface Caregiver {
+/** Perfil de um usuário autenticado (id = auth.users.id). */
+export interface Usuario {
   id: string;
-  name: string;
+  nome: string;
+  tipo: TipoUsuario;
 }
 
-export interface Shift {
+export interface Tarefa {
   id: string;
-  patient_id: string;
-  caregiver_id: string;
-  start_time: string;
-  end_time: string;
-  date: string;
+  paciente_id: string;
+  horario_previsto: string;
+  titulo: string;
+  categoria: TaskCategory;
+  instrucoes: string | null;
+  ordem: number;
+  ativo: boolean;
 }
 
-export interface Task {
+export type ExecucaoStatus = "EM_ANDAMENTO" | "CONCLUIDA";
+
+export interface Execucao {
   id: string;
-  patient_id: string;
-  scheduled_time: string;
-  title: string;
-  category: TaskCategory;
-  instructions: string | null;
-  sort_order: number;
-  active: boolean;
+  tarefa_id: string;
+  cuidador_id: string;
+  inicio: string;
+  fim: string | null;
+  status: ExecucaoStatus;
+  /** inicio - horario_previsto, em minutos. Pode ser negativo (iniciada antes do horário). */
+  atraso_minutos: number;
 }
 
-export type TaskExecutionStatus = "EM_ANDAMENTO" | "CONCLUIDA";
+/** Status exibido na UI. PENDENTE e ATRASADA são derivados (não persistidos). */
+export type DisplayStatus =
+  | "PENDENTE"
+  | "EM_ANDAMENTO"
+  | "ATRASADA"
+  | "CONCLUIDA_NO_HORARIO"
+  | "CONCLUIDA_COM_ATRASO";
 
-export interface TaskExecution {
-  id: string;
-  task_id: string;
-  shift_id: string;
-  started_at: string;
-  completed_at: string | null;
-  status: TaskExecutionStatus;
-  is_delayed: boolean;
-}
-
-/** Status exibido na UI, incluindo os derivados (PENDENTE/ATRASADA) que não são persistidos. */
-export type DisplayStatus = "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDA" | "ATRASADA";
-
-export interface TaskWithStatus extends Task {
-  execution: TaskExecution | null;
+export interface TarefaComStatus extends Tarefa {
+  execucao: Execucao | null;
   status: DisplayStatus;
+}
+
+export interface BatchAlert {
+  quantidade: number;
+  inicioMin: string;
+  inicioMax: string;
+  previstoMin: string;
+  previstoMax: string;
 }

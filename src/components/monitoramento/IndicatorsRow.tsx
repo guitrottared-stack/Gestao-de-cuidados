@@ -2,7 +2,8 @@ import type { DisplayStatus } from "@/lib/types";
 
 export function IndicatorsRow({ counts }: { counts: Record<DisplayStatus, number> }) {
   const items: { status: DisplayStatus; label: string; dot: string }[] = [
-    { status: "CONCLUIDA", label: "concluídas", dot: "bg-emerald-500" },
+    { status: "CONCLUIDA_NO_HORARIO", label: "no horário", dot: "bg-emerald-500" },
+    { status: "CONCLUIDA_COM_ATRASO", label: "com atraso", dot: "bg-orange-500" },
     { status: "EM_ANDAMENTO", label: "em andamento", dot: "bg-amber-500" },
     { status: "ATRASADA", label: "atrasadas", dot: "bg-red-500" },
     { status: "PENDENTE", label: "pendentes", dot: "bg-slate-400" },

@@ -1,80 +1,43 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { usePatient } from "@/lib/usePatient";
+import { useAuth } from "@/lib/useAuth";
+import { usePaciente } from "@/lib/usePaciente";
 import { useTodayTasks } from "@/lib/useTodayTasks";
-import { scheduledDateTimeToday } from "@/lib/status";
-import { getOrCreateShift, TURNOS } from "@/lib/shifts";
-import { ShiftSetup } from "@/components/cuidador/ShiftSetup";
+import { calcAtrasoMinutos } from "@/lib/status";
+import { PLANTAO } from "@/lib/constants";
+import { LoginForm } from "@/components/auth/LoginForm";
 import { CurrentTaskCard } from "@/components/cuidador/CurrentTaskCard";
 import { UpcomingTaskList } from "@/components/cuidador/UpcomingTaskList";
-import type { Caregiver, Turno } from "@/lib/types";
 
-const STORAGE_KEY = "cuidador-sessao";
-
-interface Session {
-  caregiverId: string;
-  caregiverName: string;
-  turno: Turno;
-}
+const CONCLUDED_STATUSES = new Set(["CONCLUIDA_NO_HORARIO", "CONCLUIDA_COM_ATRASO"]);
 
 export default function CuidadorPage() {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [shiftId, setShiftId] = useState<string | null>(null);
+  const { user, usuario, loading: authLoading, signIn, signOut } = useAuth();
+  const { paciente, loading: pacienteLoading, error: pacienteError } = usePaciente();
+  const { tarefas, loading, error, now, refetch } = useTodayTasks(paciente?.id ?? null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const { patient, loading: patientLoading, error: patientError } = usePatient();
-  const { tasks, loading, error, now, refetch } = useTodayTasks(patient?.id ?? null);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      setSession(raw ? (JSON.parse(raw) as Session) : null);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!session || !patient) return;
-    let cancelled = false;
-    getOrCreateShift(patient.id, session.caregiverId, session.turno).then((shift) => {
-      if (!cancelled) setShiftId(shift.id);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [session, patient]);
-
-  const confirmSetup = useCallback(async (caregiverId: string, turno: Turno) => {
-    const { data } = await supabase.from("caregivers").select("*").eq("id", caregiverId).single<Caregiver>();
-    const newSession: Session = { caregiverId, caregiverName: data?.name ?? "Cuidador", turno };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession));
-    setSession(newSession);
-  }, []);
-
-  const trocarPlantao = useCallback(() => {
-    window.localStorage.removeItem(STORAGE_KEY);
-    setSession(null);
-    setShiftId(null);
-  }, []);
-
-  const currentTask = useMemo(() => tasks.find((t) => t.status !== "CONCLUIDA") ?? null, [tasks]);
-  const upcomingTasks = useMemo(() => {
-    if (!currentTask) return [];
-    const idx = tasks.findIndex((t) => t.id === currentTask.id);
-    return tasks.slice(idx + 1, idx + 6);
-  }, [tasks, currentTask]);
+  const currentTarefa = useMemo(() => tarefas.find((t) => !CONCLUDED_STATUSES.has(t.status)) ?? null, [tarefas]);
+  const upcomingTarefas = useMemo(() => {
+    if (!currentTarefa) return [];
+    const idx = tarefas.findIndex((t) => t.id === currentTarefa.id);
+    return tarefas.slice(idx + 1, idx + 6);
+  }, [tarefas, currentTarefa]);
 
   const handleStart = useCallback(async () => {
-    if (!currentTask || !shiftId) return;
+    if (!currentTarefa || !user) return;
     setBusy(true);
     setActionError(null);
-    const { error } = await supabase.from("task_executions").insert({
-      task_id: currentTask.id,
-      shift_id: shiftId,
+    const inicio = new Date();
+    const { error } = await supabase.from("execucao").insert({
+      tarefa_id: currentTarefa.id,
+      cuidador_id: user.id,
       status: "EM_ANDAMENTO",
+      atraso_minutos: calcAtrasoMinutos(currentTarefa.horario_previsto, inicio),
     });
     setBusy(false);
     if (error) {
@@ -82,48 +45,65 @@ export default function CuidadorPage() {
       return;
     }
     refetch();
-  }, [currentTask, shiftId, refetch]);
+  }, [currentTarefa, user, refetch]);
 
   const handleFinish = useCallback(async () => {
-    if (!currentTask?.execution) return;
+    if (!currentTarefa?.execucao) return;
     setBusy(true);
     setActionError(null);
-    const startedAt = new Date(currentTask.execution.started_at);
-    const scheduled = scheduledDateTimeToday(currentTask.scheduled_time, startedAt);
-    const isDelayed = startedAt.getTime() > scheduled.getTime();
-
     const { error } = await supabase
-      .from("task_executions")
-      .update({ completed_at: new Date().toISOString(), status: "CONCLUIDA", is_delayed: isDelayed })
-      .eq("id", currentTask.execution.id);
+      .from("execucao")
+      .update({ fim: new Date().toISOString(), status: "CONCLUIDA" })
+      .eq("id", currentTarefa.execucao.id);
     setBusy(false);
     if (error) {
       setActionError("Não foi possível finalizar a tarefa. Tente novamente.");
       return;
     }
     refetch();
-  }, [currentTask, refetch]);
+  }, [currentTarefa, refetch]);
 
-  if (session === undefined || patientLoading) {
+  if (authLoading || pacienteLoading) {
     return <div className="flex min-h-dvh items-center justify-center text-slate-400">Carregando...</div>;
   }
 
-  if (patientError || !patient) {
+  if (!user) {
+    return <LoginForm title="Entrar como Cuidador" subtitle="Acesse com seu e-mail e senha" onSubmit={signIn} />;
+  }
+
+  if (!usuario) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-2 px-6 text-center">
-        <p className="font-semibold text-red-600">Não foi possível carregar o paciente.</p>
-        <p className="text-sm text-slate-500">
-          {patientError ?? "Verifique se o Supabase está configurado e se supabase/seed.sql foi executado."}
-        </p>
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="font-semibold text-red-600">Sua conta ainda não está vinculada a um perfil.</p>
+        <p className="text-sm text-slate-500">Peça para o administrador cadastrar seu perfil na tabela `usuario` (veja o README).</p>
+        <button onClick={signOut} className="mt-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
+          Sair
+        </button>
       </div>
     );
   }
 
-  if (!session) {
-    return <ShiftSetup onConfirm={confirmSetup} />;
+  if (usuario.tipo !== "cuidador") {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="font-semibold text-red-600">Esta área é exclusiva para cuidadores.</p>
+        <button onClick={signOut} className="mt-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
+          Sair
+        </button>
+      </div>
+    );
   }
 
-  const turnoInfo = TURNOS[session.turno];
+  if (pacienteError || !paciente) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-2 px-6 text-center">
+        <p className="font-semibold text-red-600">Não foi possível carregar o paciente.</p>
+        <p className="text-sm text-slate-500">
+          {pacienteError ?? "Verifique se o Supabase está configurado e se supabase/seed.sql foi executado."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-md px-4 py-6 pb-12">
@@ -131,20 +111,20 @@ export default function CuidadorPage() {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-teal-200">Plantão</p>
-            <p className="mt-1 text-lg font-bold">{patient.name}</p>
+            <p className="mt-1 text-lg font-bold">{paciente.nome}</p>
           </div>
           <button
-            onClick={trocarPlantao}
+            onClick={signOut}
             className="flex items-center gap-1 rounded-lg bg-teal-800/60 px-2.5 py-1.5 text-xs font-medium text-teal-100"
           >
             <LogOut size={14} />
-            Trocar
+            Sair
           </button>
         </div>
         <div className="mt-3 space-y-0.5 text-sm text-teal-100">
-          <p>Cuidador: {session.caregiverName}</p>
+          <p>Cuidador: {usuario.nome}</p>
           <p>
-            Horário do plantão: {turnoInfo.start} - {turnoInfo.end}
+            Horário do plantão: {PLANTAO.start} - {PLANTAO.end}
           </p>
         </div>
       </header>
@@ -155,15 +135,21 @@ export default function CuidadorPage() {
 
       {!loading && !error && (
         <div className="space-y-8">
-          {currentTask ? (
-            <CurrentTaskCard task={currentTask} onStart={handleStart} onFinish={handleFinish} busy={busy} now={now} />
+          {currentTarefa ? (
+            <CurrentTaskCard
+              tarefa={currentTarefa}
+              onStart={handleStart}
+              onFinish={handleFinish}
+              busy={busy}
+              now={now}
+            />
           ) : (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
               <p className="text-lg font-bold text-emerald-800">Todas as tarefas de hoje foram concluídas 🎉</p>
             </div>
           )}
 
-          <UpcomingTaskList tasks={upcomingTasks} />
+          <UpcomingTaskList tarefas={upcomingTarefas} />
         </div>
       )}
     </div>

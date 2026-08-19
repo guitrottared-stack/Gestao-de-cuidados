@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import { attachStatus, todayDateString } from "./status";
-import type { Shift, Task, TaskExecution, TaskWithStatus } from "./types";
+import { attachStatus, todayRangeISO } from "./status";
+import type { Execucao, Tarefa, TarefaComStatus } from "./types";
 
 interface UseTodayTasksResult {
-  tasks: TaskWithStatus[];
-  shiftsToday: Shift[];
+  tarefas: TarefaComStatus[];
+  execucoes: Execucao[];
   loading: boolean;
   error: string | null;
   now: Date;
@@ -16,13 +16,12 @@ interface UseTodayTasksResult {
 
 /**
  * Carrega a rotina do paciente e as execuções de hoje, mantendo tudo em
- * sincronia via Supabase Realtime (task_executions) e um relógio interno
- * (para tarefas passarem de PENDENTE para ATRASADA mesmo sem eventos novos).
+ * sincronia via Supabase Realtime (execucao) e um relógio interno (para
+ * tarefas passarem de PENDENTE para ATRASADA mesmo sem eventos novos).
  */
-export function useTodayTasks(patientId: string | null): UseTodayTasksResult {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [executions, setExecutions] = useState<TaskExecution[]>([]);
-  const [shiftsToday, setShiftsToday] = useState<Shift[]>([]);
+export function useTodayTasks(pacienteId: string | null): UseTodayTasksResult {
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [execucoes, setExecucoes] = useState<Execucao[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -36,57 +35,40 @@ export function useTodayTasks(patientId: string | null): UseTodayTasksResult {
   }, []);
 
   useEffect(() => {
-    if (!patientId) return;
+    if (!pacienteId) return;
     let cancelled = false;
 
     async function load() {
       setLoading(true);
       setError(null);
-      const date = todayDateString();
+      const { startISO, endISO } = todayRangeISO();
 
-      const [tasksRes, shiftsRes] = await Promise.all([
+      const [tarefasRes, execucoesRes] = await Promise.all([
         supabase
-          .from("tasks")
+          .from("tarefa")
           .select("*")
-          .eq("patient_id", patientId)
-          .eq("active", true)
-          .order("scheduled_time", { ascending: true })
-          .order("sort_order", { ascending: true }),
-        supabase.from("shifts").select("*").eq("patient_id", patientId).eq("date", date),
+          .eq("paciente_id", pacienteId)
+          .eq("ativo", true)
+          .order("horario_previsto", { ascending: true })
+          .order("ordem", { ascending: true }),
+        supabase.from("execucao").select("*").gte("inicio", startISO).lt("inicio", endISO),
       ]);
 
       if (cancelled) return;
 
-      if (tasksRes.error) {
-        setError(tasksRes.error.message);
+      if (tarefasRes.error) {
+        setError(tarefasRes.error.message);
         setLoading(false);
         return;
       }
-      if (shiftsRes.error) {
-        setError(shiftsRes.error.message);
+      if (execucoesRes.error) {
+        setError(execucoesRes.error.message);
         setLoading(false);
         return;
       }
 
-      const shiftIds = (shiftsRes.data ?? []).map((s) => s.id);
-      let executionsData: TaskExecution[] = [];
-      if (shiftIds.length > 0) {
-        const executionsRes = await supabase
-          .from("task_executions")
-          .select("*")
-          .in("shift_id", shiftIds);
-        if (cancelled) return;
-        if (executionsRes.error) {
-          setError(executionsRes.error.message);
-          setLoading(false);
-          return;
-        }
-        executionsData = executionsRes.data ?? [];
-      }
-
-      setTasks(tasksRes.data ?? []);
-      setShiftsToday(shiftsRes.data ?? []);
-      setExecutions(executionsData);
+      setTarefas(tarefasRes.data ?? []);
+      setExecucoes(execucoesRes.data ?? []);
       setLoading(false);
     }
 
@@ -94,17 +76,14 @@ export function useTodayTasks(patientId: string | null): UseTodayTasksResult {
     return () => {
       cancelled = true;
     };
-  }, [patientId, reloadToken]);
+  }, [pacienteId, reloadToken]);
 
   useEffect(() => {
-    if (!patientId) return;
+    if (!pacienteId) return;
 
     const channel = supabase
-      .channel(`task_executions-${patientId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "task_executions" }, () => {
-        refetch();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "shifts" }, () => {
+      .channel(`execucao-${pacienteId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "execucao" }, () => {
         refetch();
       })
       .subscribe();
@@ -112,11 +91,11 @@ export function useTodayTasks(patientId: string | null): UseTodayTasksResult {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [patientId, refetch]);
+  }, [pacienteId, refetch]);
 
   return {
-    tasks: attachStatus(tasks, executions, now),
-    shiftsToday,
+    tarefas: attachStatus(tarefas, execucoes, now),
+    execucoes,
     loading,
     error,
     now,

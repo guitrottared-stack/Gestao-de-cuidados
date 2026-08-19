@@ -1,23 +1,18 @@
--- Dados iniciais do MVP.
--- Execute depois de schema.sql. Seguro para rodar mais de uma vez
--- (usa DELETE + INSERT para tasks/patients/caregivers "seed", nunca
--- toca em shifts/task_executions, que são o histórico real).
+-- Dados iniciais do MVP (v2 — schema em português + autenticação).
+-- Execute depois de schema.sql. Seguro para rodar mais de uma vez.
+--
+-- Cuidadores e família NÃO são cadastrados aqui: agora fazem login via
+-- Supabase Auth (e-mail/senha). Veja o passo a passo no README.md —
+-- resumo: crie o usuário em Authentication → Users no painel do
+-- Supabase, copie o UUID gerado, e rode um INSERT na tabela `usuario`
+-- (exemplo comentado no final deste arquivo).
 
 -- =========================================================
 -- Paciente (MVP: um único paciente)
 -- =========================================================
-insert into patients (id, name)
-values ('00000000-0000-0000-0000-000000000001', 'Paciente')
-on conflict (id) do update set name = excluded.name;
-
--- =========================================================
--- Cuidadores (MVP: sem cadastro complexo, apenas seleção simples)
--- =========================================================
-insert into caregivers (id, name) values
-  ('00000000-0000-0000-0000-000000000101', 'Cuidador 1'),
-  ('00000000-0000-0000-0000-000000000102', 'Cuidador 2'),
-  ('00000000-0000-0000-0000-000000000103', 'Cuidador 3')
-on conflict (id) do update set name = excluded.name;
+insert into paciente (id, nome)
+values ('00000000-0000-0000-0000-000000000001', 'Dona Elza')
+on conflict (id) do update set nome = excluded.nome;
 
 -- =========================================================
 -- Rotina diária de tarefas
@@ -26,9 +21,9 @@ on conflict (id) do update set name = excluded.name;
 -- como cadastrados. Nenhuma recomendação médica é feita aqui.
 -- =========================================================
 
-delete from tasks where patient_id = '00000000-0000-0000-0000-000000000001';
+delete from tarefa where paciente_id = '00000000-0000-0000-0000-000000000001';
 
-insert into tasks (patient_id, scheduled_time, title, category, instructions, sort_order) values
+insert into tarefa (paciente_id, horario_previsto, titulo, categoria, instrucoes, ordem) values
 ('00000000-0000-0000-0000-000000000001', '06:00', 'Dieta', 'dieta', 'Instalar 200 ml de dieta com 1 colher de azeite.', 10),
 
 ('00000000-0000-0000-0000-000000000001', '07:00', 'Higiene', 'higiene', 'Realizar higiene íntima com sabonete próprio.', 20),
@@ -86,3 +81,19 @@ insert into tasks (patient_id, scheduled_time, title, category, instructions, so
 
 ('00000000-0000-0000-0000-000000000001', '23:00', 'Medicação', 'medicacao', '4 comprimidos de aciclovir diluído em 10 ml de água.', 190),
 ('00000000-0000-0000-0000-000000000001', '23:00', 'Mudança de decúbito', 'mudanca_decubito', 'Realizar conforme relógio da parede.', 191);
+
+-- =========================================================
+-- Exemplo: como ligar uma conta de login a um perfil (usuario)
+--
+-- 1. Painel do Supabase → Authentication → Users → Add user.
+--    Preencha e-mail e senha, marque "Auto Confirm User", crie.
+-- 2. Copie o UUID do usuário criado (coluna "UID" da lista).
+-- 3. Rode este INSERT trocando o UUID, nome e tipo:
+--
+--   insert into usuario (id, nome, tipo)
+--   values ('COLE-O-UUID-AQUI', 'Maria', 'cuidador');
+--
+-- Repita para cada cuidador e para ao menos uma conta da família
+-- (tipo 'familia'). Sem essa linha em `usuario`, o login funciona mas
+-- o app não sabe se a pessoa é cuidador ou família.
+-- =========================================================
