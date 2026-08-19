@@ -26,7 +26,7 @@ export default function CuidadorPage() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const { patient } = usePatient();
+  const { patient, loading: patientLoading, error: patientError } = usePatient();
   const { tasks, loading, error, now, refetch } = useTodayTasks(patient?.id ?? null);
 
   useEffect(() => {
@@ -104,8 +104,19 @@ export default function CuidadorPage() {
     refetch();
   }, [currentTask, refetch]);
 
-  if (session === undefined || !patient) {
+  if (session === undefined || patientLoading) {
     return <div className="flex min-h-dvh items-center justify-center text-slate-400">Carregando...</div>;
+  }
+
+  if (patientError || !patient) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-2 px-6 text-center">
+        <p className="font-semibold text-red-600">Não foi possível carregar o paciente.</p>
+        <p className="text-sm text-slate-500">
+          {patientError ?? "Verifique se o Supabase está configurado e se supabase/seed.sql foi executado."}
+        </p>
+      </div>
+    );
   }
 
   if (!session) {
