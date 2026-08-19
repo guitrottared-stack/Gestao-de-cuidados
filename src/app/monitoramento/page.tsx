@@ -17,7 +17,7 @@ import type { DisplayStatus } from "@/lib/types";
 
 export default function MonitoramentoPage() {
   const { user, usuario, loading: authLoading, signIn, signOut } = useAuth();
-  const { paciente, loading: pacienteLoading, error: pacienteError } = usePaciente();
+  const { paciente, loading: pacienteLoading, error: pacienteError } = usePaciente(!!user);
   const { tarefas, execucoes, loading, error, now } = useTodayTasks(paciente?.id ?? null);
   const [cuidadorAtualNome, setCuidadorAtualNome] = useState<string | null>(null);
 
