@@ -16,7 +16,7 @@ const CONCLUDED_STATUSES = new Set(["CONCLUIDA_NO_HORARIO", "CONCLUIDA_COM_ATRAS
 
 export default function CuidadorPage() {
   const { user, usuario, loading: authLoading, signIn, signOut } = useAuth();
-  const { paciente, loading: pacienteLoading, error: pacienteError } = usePaciente();
+  const { paciente, loading: pacienteLoading, error: pacienteError } = usePaciente(!!user);
   const { tarefas, loading, error, now, refetch } = useTodayTasks(paciente?.id ?? null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
