@@ -4,13 +4,22 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import type { Paciente } from "./types";
 
-export function usePaciente() {
+export function usePaciente(ready: boolean) {
   const [paciente, setPaciente] = useState<Paciente | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!ready) {
+      setPaciente(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
+    setLoading(true);
+    setError(null);
     supabase
       .from("paciente")
       .select("*")
@@ -25,7 +34,7 @@ export function usePaciente() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ready]);
 
   return { paciente, loading, error };
 }
