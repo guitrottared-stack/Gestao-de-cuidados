@@ -12,7 +12,7 @@ export type TaskCategory =
   | "banho_sol"
   | "estimulacao";
 
-export type TipoUsuario = "cuidador" | "familia";
+export type TipoUsuario = "cuidador" | "familia" | "gestor";
 
 export interface Paciente {
   id: string;
